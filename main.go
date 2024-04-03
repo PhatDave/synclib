@@ -87,15 +87,21 @@ func ReadFromFilesRecursively(input string) ([]LinkInstruction, error) {
 		log.Fatalf("Failed to get sync files recursively: %s%+v%s", ErrorColor, err, DefaultColor)
 	}
 
-	dirRegex, _ := regexp.Compile("^(.+?)sync$")
+	dirRegex, _ := regexp.Compile(`^(.+?)[/\\]sync$`)
 	for _, file := range files {
 		file = NormalizePath(file)
 
 		// This "has" to be done because instructions are resolved in relation to cwd
 		fileDir := dirRegex.FindStringSubmatch(file)
+		log.Printf("Changing directory to %s%s%s (for %s%s%s)", PathColor, fileDir[1], DefaultColor, PathColor, file, DefaultColor)
+		if fileDir == nil {
+			log.Printf("Failed to extract directory from %s%s%s", SourceColor, file, DefaultColor)
+			continue
+		}
 		err := os.Chdir(fileDir[1])
 		if err != nil {
-			log.Fatalf("Failed to change directory to %s%s%s: %s%+v%s", SourceColor, fileDir[1], DefaultColor, ErrorColor, err, DefaultColor)
+			log.Printf("Failed to change directory to %s%s%s: %s%+v%s", SourceColor, fileDir[1], DefaultColor, ErrorColor, err, DefaultColor)
+			continue
 		}
 
 		fileInstructions, _ := ReadFromFile(file)
@@ -199,7 +205,7 @@ func RunInstruction(instruction LinkInstruction) error {
 	}
 
 	if AreSame(instruction.Source, instruction.Target) {
-		log.Printf("Source %s%s%s and target %s%s%s are the same, nothing to do...", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor)
+		log.Printf("Source %s%s%s and target %s%s%s are the same, %snothing to do...%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor, PathColor, DefaultColor)
 		return nil
 	}
 
