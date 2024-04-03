@@ -25,6 +25,7 @@ const SourceColor = Magenta
 const TargetColor = Yellow
 const ErrorColor = Red
 const DefaultColor = White
+const PathColor = Green
 
 var programName = os.Args[0]
 
@@ -45,82 +46,66 @@ func main() {
 
 	log.Printf("Recurse: %s", *recurse)
 	log.Printf("File: %s", *file)
-	// The plan:
-	// As input take file or list of files (via -f)
-	// For every file: ch work dir to file dir
-	// Read file
-	// Parse instructions
-	// Run instructions
-	// If not -f then if -r:
-	// Recurse into directories
-	// Find all sync files
-	// Repeat the above for every file
-	// If not -f and not -r and args:
-	// Read from args
-	// Parse instructions
-	// Run instructions
-	// If not -f and not -r and no args:
-	// Read from stdin
-	// Parse instructions
-	// Run instructions
 
+	var instructions []LinkInstruction
 	if *recurse != "" {
-		startingDir, _ := os.Getwd()
-		log.Println("Workdir:", startingDir)
-		var targetDir = os.Args[1]
-		if targetDir == "" {
-			targetDir, _ = os.Getwd()
-		}
-		log.Printf("Recursively finding sync files in workdir %s...", targetDir)
-
-		files, err := GetSyncFilesRecursively(targetDir)
-		if err != nil {
-			log.Fatalf("Failed to get sync files recursively: %s%+v%s", ErrorColor, err, DefaultColor)
-		}
-
-		dirRegex, _ := regexp.Compile("^(.+?)sync$")
-		for _, file := range files {
-			file = NormalizePath(file)
-			fileDir := dirRegex.FindStringSubmatch(file)
-			err := os.Chdir(fileDir[1])
-			if err != nil {
-				log.Fatalf("Failed to change directory to %s%s%s: %s%+v%s", SourceColor, fileDir[1], DefaultColor, ErrorColor, err, DefaultColor)
-			}
-
-		}
+		instructions, _ = ReadFromFilesRecursively(*recurse)
+	} else if *file != "" {
+		instructions, _ = ReadFromFile(*file)
+	} else if len(os.Args) > 1 {
+		instructions, _ = ReadFromArgs()
 	} else {
-		var instructions []LinkInstruction
-		if *file != "" {
-			instructions, _ = ReadFromFile(*file)
-		} else if len(os.Args) > 1 {
-			instructions, _ = ReadFromArgs()
-		} else {
-			instructions, _ = ReadFromStdin()
-		}
-
-		if len(instructions) == 0 {
-			log.Printf("No input provided")
-			log.Println("Supply input as: ")
-			log.Printf("Arguments - %s <source>,<target>,<force?>", programName)
-			log.Printf("File - %s -f <file>", programName)
-			log.Printf("Folder (finding sync files in folder recursively) - %s -r <folder>", programName)
-			log.Printf("stdin - (cat <file> | %s)", programName)
-			os.Exit(1)
-		}
-		for _, instruction := range instructions {
-			log.Printf("Processing: %s", InstructionToString(instruction))
-			err := RunInstruction(instruction)
-			if err != nil {
-				log.Printf("Failed parsing instruction %s%s%s due to %s%+v%s", SourceColor, InstructionToString(instruction), DefaultColor, ErrorColor, err, DefaultColor)
-				continue
-			}
-		}
+		instructions, _ = ReadFromStdin()
 	}
 
+	if len(instructions) == 0 {
+		log.Printf("No input provided")
+		log.Printf("Provide input as: ")
+		log.Printf("Arguments - %s <source>,<target>,<force?>", programName)
+		log.Printf("File - %s -f <file>", programName)
+		log.Printf("Folder (finding sync files in folder recursively) - %s -r <folder>", programName)
+		log.Printf("stdin - (cat <file> | %s)", programName)
+		os.Exit(1)
+	}
+	for _, instruction := range instructions {
+		log.Printf("Processing: %s", InstructionToString(instruction))
+		err := RunInstruction(instruction)
+		if err != nil {
+			log.Printf("Failed parsing instruction %s%s%s due to %s%+v%s", SourceColor, InstructionToString(instruction), DefaultColor, ErrorColor, err, DefaultColor)
+			continue
+		}
+	}
 }
 
+func ReadFromFilesRecursively(input string) ([]LinkInstruction, error) {
+	input = NormalizePath(input)
+	log.Printf("Reading input from files recursively starting in %s%s%s", PathColor, input, DefaultColor)
+	var instructions []LinkInstruction
+
+	files, err := GetSyncFilesRecursively(input)
+	if err != nil {
+		log.Fatalf("Failed to get sync files recursively: %s%+v%s", ErrorColor, err, DefaultColor)
+	}
+
+	dirRegex, _ := regexp.Compile("^(.+?)sync$")
+	for _, file := range files {
+		file = NormalizePath(file)
+
+		// This "has" to be done because instructions are resolved in relation to cwd
+		fileDir := dirRegex.FindStringSubmatch(file)
+		err := os.Chdir(fileDir[1])
+		if err != nil {
+			log.Fatalf("Failed to change directory to %s%s%s: %s%+v%s", SourceColor, fileDir[1], DefaultColor, ErrorColor, err, DefaultColor)
+		}
+
+		fileInstructions, _ := ReadFromFile(file)
+		instructions = append(instructions, fileInstructions...)
+	}
+	return instructions, nil
+}
 func ReadFromFile(input string) ([]LinkInstruction, error) {
-	log.Printf("Reading input from file: %s", input)
+	input = NormalizePath(input)
+	log.Printf("Reading input from file: %s%s%s", PathColor, input, DefaultColor)
 	var instructions []LinkInstruction
 	file, err := os.Open(input)
 	if err != nil {
