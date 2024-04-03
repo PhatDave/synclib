@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -20,10 +22,7 @@ func IsSymlink(path string) (bool, error) {
 
 func FileExists(path string) bool {
 	_, err := os.Lstat(path)
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
 
 func NormalizePath(input string) string {
@@ -61,4 +60,29 @@ func ConvertHome(input string) (string, error) {
 		return strings.Replace(input, "~", homedir, 1), nil
 	}
 	return input, nil
+}
+
+func InstructionToString(instruction LinkInstruction) string {
+	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s", SourceColor, instruction.Source, DefaultColor, deliminer, TargetColor, instruction.Target, DefaultColor, deliminer, strconv.FormatBool(instruction.Force))
+}
+
+func GetSyncFilesRecursively(input string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(input, func(path string, file fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		
+		// Effectively only find files named "sync" (with no extension!!)
+		if !file.IsDir() && strings.HasSuffix(path, "sync") {
+			files = append(files, path)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return files, nil
 }
