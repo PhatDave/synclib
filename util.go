@@ -74,7 +74,7 @@ func GetSyncFilesRecursively(input string) ([]string, error) {
 		}
 		
 		// Effectively only find files named "sync" (with no extension!!)
-		if !file.IsDir() && strings.HasSuffix(path, "sync") {
+		if !file.IsDir() && DirRegex.MatchString(path) {
 			files = append(files, path)
 		}
 
