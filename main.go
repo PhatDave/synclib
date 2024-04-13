@@ -27,6 +27,7 @@ const ErrorColor = Red
 const DefaultColor = White
 const PathColor = Green
 
+var DirRegex, _ = regexp.Compile(`^(.+?)[/\\]sync$`)
 var programName = os.Args[0]
 
 type LinkInstruction struct {
@@ -87,17 +88,16 @@ func ReadFromFilesRecursively(input string) ([]LinkInstruction, error) {
 		log.Fatalf("Failed to get sync files recursively: %s%+v%s", ErrorColor, err, DefaultColor)
 	}
 
-	dirRegex, _ := regexp.Compile(`^(.+?)[/\\]sync$`)
 	for _, file := range files {
 		file = NormalizePath(file)
 
 		// This "has" to be done because instructions are resolved in relation to cwd
-		fileDir := dirRegex.FindStringSubmatch(file)
-		log.Printf("Changing directory to %s%s%s (for %s%s%s)", PathColor, fileDir[1], DefaultColor, PathColor, file, DefaultColor)
+		fileDir := DirRegex.FindStringSubmatch(file)
 		if fileDir == nil {
 			log.Printf("Failed to extract directory from %s%s%s", SourceColor, file, DefaultColor)
 			continue
 		}
+		log.Printf("Changing directory to %s%s%s (for %s%s%s)", PathColor, fileDir[1], DefaultColor, PathColor, file, DefaultColor)
 		err := os.Chdir(fileDir[1])
 		if err != nil {
 			log.Printf("Failed to change directory to %s%s%s: %s%+v%s", SourceColor, fileDir[1], DefaultColor, ErrorColor, err, DefaultColor)
