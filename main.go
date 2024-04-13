@@ -234,6 +234,7 @@ func RunInstruction(instruction LinkInstruction) error {
 	if err != nil {
 		return fmt.Errorf("failed creating symlink between %s%s%s and %s%s%s with error %s%+v%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
 	}
-
+	log.Printf("Created symlink between %s%s%s and %s%s%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor)
+	
 	return nil
 }
