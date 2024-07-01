@@ -36,23 +36,102 @@ type LinkInstruction struct {
 	Force  bool
 }
 
+func (instruction *LinkInstruction) RunSync() error {
+	if !FileExists(instruction.Source) {
+		return fmt.Errorf("instruction source %s%s%s does not exist", SourceColor, instruction.Source, DefaultColor)
+	}
+
+	if AreSame(instruction.Source, instruction.Target) {
+		log.Printf("Source %s%s%s and target %s%s%s are the same, %snothing to do...%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor, PathColor, DefaultColor)
+		return nil
+	}
+
+	if FileExists(instruction.Target) {
+		if instruction.Force {
+			isSymlink, err := IsSymlink(instruction.Target)
+			if err != nil {
+				return fmt.Errorf("could not determine whether %s%s%s is a sym link or not, stopping; err: %s%+v%s", TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
+			}
+
+			if isSymlink {
+				log.Printf("Removing symlink at %s%s%s", TargetColor, instruction.Target, DefaultColor)
+				err = os.Remove(instruction.Target)
+				if err != nil {
+					return fmt.Errorf("failed deleting %s%s%s due to %s%+v%s", TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
+				}
+			} else {
+				return fmt.Errorf("refusing to delte actual (non symlink) file %s%s%s", TargetColor, instruction.Target, DefaultColor)
+			}
+		} else {
+			return fmt.Errorf("target %s%s%s exists - handle manually or set the 'forced' flag (3rd field)", TargetColor, instruction.Target, DefaultColor)
+		}
+	}
+
+	err := os.Symlink(instruction.Source, instruction.Target)
+	if err != nil {
+		return fmt.Errorf("failed creating symlink between %s%s%s and %s%s%s with error %s%+v%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
+	}
+	log.Printf("Created symlink between %s%s%s and %s%s%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor)
+	
+	return nil
+}
+
+func (instruction *LinkInstruction) RunAsync(status chan(error)) {
+	if !FileExists(instruction.Source) {
+		status <- fmt.Errorf("instruction source %s%s%s does not exist", SourceColor, instruction.Source, DefaultColor)
+	}
+
+	if AreSame(instruction.Source, instruction.Target) {
+		status <- fmt.Errorf("source %s%s%s and target %s%s%s are the same, %snothing to do...%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor, PathColor, DefaultColor)
+	}
+
+	if FileExists(instruction.Target) {
+		if instruction.Force {
+			isSymlink, err := IsSymlink(instruction.Target)
+			if err != nil {
+				status <- fmt.Errorf("could not determine whether %s%s%s is a sym link or not, stopping; err: %s%+v%s", TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
+			}
+
+			if isSymlink {
+				log.Printf("Removing symlink at %s%s%s", TargetColor, instruction.Target, DefaultColor)
+				err = os.Remove(instruction.Target)
+				if err != nil {
+					status <- fmt.Errorf("failed deleting %s%s%s due to %s%+v%s", TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
+				}
+			} else {
+				status <- fmt.Errorf("refusing to delte actual (non symlink) file %s%s%s", TargetColor, instruction.Target, DefaultColor)
+			}
+		} else {
+			status <- fmt.Errorf("target %s%s%s exists - handle manually or set the 'forced' flag (3rd field)", TargetColor, instruction.Target, DefaultColor)
+		}
+	}
+
+	err := os.Symlink(instruction.Source, instruction.Target)
+	if err != nil {
+		status <- fmt.Errorf("failed creating symlink between %s%s%s and %s%s%s with error %s%+v%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
+	}
+	log.Printf("Created symlink between %s%s%s and %s%s%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor)
+	
+	status <- nil
+}
+
 func main() {
 	// Format:
 	// source,target,force?
 	log.SetFlags(log.Lmicroseconds)
 
-	recurse := flag.String("r", "", "recurse into directories")
-	file := flag.String("f", "", "file to read instructions from")
+	recurse := *flag.String("r", "", "recurse into directories")
+	file := *flag.String("f", "", "file to read instructions from")
 	flag.Parse()
 
-	log.Printf("Recurse: %s", *recurse)
-	log.Printf("File: %s", *file)
+	log.Printf("Recurse: %s", recurse)
+	log.Printf("File: %s", file)
 
 	var instructions []LinkInstruction
-	if *recurse != "" {
-		instructions, _ = ReadFromFilesRecursively(*recurse)
-	} else if *file != "" {
-		instructions, _ = ReadFromFile(*file)
+	if recurse != "" {
+		instructions, _ = ReadFromFilesRecursively(recurse)
+	} else if file != "" {
+		instructions, _ = ReadFromFile(file)
 	} else if len(os.Args) > 1 {
 		instructions, _ = ReadFromArgs()
 	} else {
@@ -70,7 +149,7 @@ func main() {
 	}
 	for _, instruction := range instructions {
 		log.Printf("Processing: %s", InstructionToString(instruction))
-		err := RunInstruction(instruction)
+		err := instruction.RunSync()
 		if err != nil {
 			log.Printf("Failed parsing instruction %s%s%s due to %s%+v%s", SourceColor, InstructionToString(instruction), DefaultColor, ErrorColor, err, DefaultColor)
 			continue
@@ -197,44 +276,4 @@ func ParseInstruction(line string) (LinkInstruction, error) {
 	instruction.Target = NormalizePath(instruction.Target)
 
 	return instruction, nil
-}
-
-func RunInstruction(instruction LinkInstruction) error {
-	if !FileExists(instruction.Source) {
-		return fmt.Errorf("instruction source %s%s%s does not exist", SourceColor, instruction.Source, DefaultColor)
-	}
-
-	if AreSame(instruction.Source, instruction.Target) {
-		log.Printf("Source %s%s%s and target %s%s%s are the same, %snothing to do...%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor, PathColor, DefaultColor)
-		return nil
-	}
-
-	if FileExists(instruction.Target) {
-		if instruction.Force {
-			isSymlink, err := IsSymlink(instruction.Target)
-			if err != nil {
-				return fmt.Errorf("could not determine whether %s%s%s is a sym link or not, stopping; err: %s%+v%s", TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
-			}
-
-			if isSymlink {
-				log.Printf("Removing symlink at %s%s%s", TargetColor, instruction.Target, DefaultColor)
-				err = os.Remove(instruction.Target)
-				if err != nil {
-					return fmt.Errorf("failed deleting %s%s%s due to %s%+v%s", TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
-				}
-			} else {
-				return fmt.Errorf("refusing to delte actual (non symlink) file %s%s%s", TargetColor, instruction.Target, DefaultColor)
-			}
-		} else {
-			return fmt.Errorf("target %s%s%s exists - handle manually or set the 'forced' flag (3rd field)", TargetColor, instruction.Target, DefaultColor)
-		}
-	}
-
-	err := os.Symlink(instruction.Source, instruction.Target)
-	if err != nil {
-		return fmt.Errorf("failed creating symlink between %s%s%s and %s%s%s with error %s%+v%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
-	}
-	log.Printf("Created symlink between %s%s%s and %s%s%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor)
-	
-	return nil
 }
