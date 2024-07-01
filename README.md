@@ -20,10 +20,10 @@ It supports input of these instructions through:
 - Run arguments
 	- `sync this,that foo,bar "foo 2","C:/bar"`
 - Files
-	- `sync -f \<file>`
+	- `sync -f <file>`
 	- Where the file contains instructions, one instruction per line
 - Directories
-	- `sync -r \<directory>`
+	- `sync -r <directory>`
 	- This mode will look for "sync" files recursively in directories and run their instructions
 
 ## Use case
