@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func IsSymlink(path string) (bool, error) {
@@ -65,6 +66,16 @@ func GetSyncFilesRecursively(input string, output chan string, status chan error
 	defer close(output)
 	defer close(status)
 
+	var filesProcessed int32
+	progressTicker := time.NewTicker(200 * time.Millisecond)
+	defer progressTicker.Stop()
+	go func() {
+		for {
+			<-progressTicker.C
+			fmt.Printf("\rFiles processed: %d", filesProcessed)
+		}
+	}()
+
 	err := filepath.WalkDir(input, func(path string, file fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -74,6 +85,7 @@ func GetSyncFilesRecursively(input string, output chan string, status chan error
 		if !file.IsDir() && DirRegex.MatchString(path) {
 			output <- path
 		}
+		filesProcessed++
 
 		return nil
 	})
