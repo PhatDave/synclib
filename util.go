@@ -61,8 +61,10 @@ func ConvertHome(input string) (string, error) {
 	return input, nil
 }
 
-func GetSyncFilesRecursively(input string) ([]string, error) {
-	var files []string
+func GetSyncFilesRecursively(input string, output chan string, status chan error) {
+	defer close(output)
+	defer close(status)
+
 	err := filepath.WalkDir(input, func(path string, file fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -70,14 +72,12 @@ func GetSyncFilesRecursively(input string) ([]string, error) {
 
 		// Effectively only find files named "sync" (with no extension!!)
 		if !file.IsDir() && DirRegex.MatchString(path) {
-			files = append(files, path)
+			output <- path
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		status <- err
 	}
-
-	return files, nil
 }

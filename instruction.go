@@ -129,5 +129,4 @@ func (instruction *LinkInstruction) RunAsync(status chan (error)) {
 	log.Printf("Created symlink between %s%s%s and %s%s%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor)
 
 	status <- nil
-	return
 }

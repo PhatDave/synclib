@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"sync"
+	"sync/atomic"
 )
 
 const deliminer = ","
@@ -44,13 +45,13 @@ func main() {
 	instructions := make(chan LinkInstruction, 1000)
 	status := make(chan error)
 	if *recurse != "" {
-		ReadFromFilesRecursively(*recurse, instructions, status)
+		go ReadFromFilesRecursively(*recurse, instructions, status)
 	} else if *file != "" {
-		ReadFromFile(*file, instructions, status, true)
+		go ReadFromFile(*file, instructions, status, true)
 	} else if len(os.Args) > 1 {
-		ReadFromArgs(instructions, status)
+		go ReadFromArgs(instructions, status)
 	} else {
-		ReadFromStdin(instructions, status)
+		go ReadFromStdin(instructions, status)
 	}
 
 	go func() {
@@ -65,15 +66,7 @@ func main() {
 		}
 	}()
 
-	if len(instructions) == 0 {
-		log.Printf("No input provided")
-		log.Printf("Provide input as: ")
-		log.Printf("Arguments - %s <source>,<target>,<force?>", programName)
-		log.Printf("File - %s -f <file>", programName)
-		log.Printf("Folder (finding sync files in folder recursively) - %s -r <folder>", programName)
-		log.Printf("stdin - (cat <file> | %s)", programName)
-		os.Exit(1)
-	}
+	var instructionsDone int32
 	var wg sync.WaitGroup
 	for {
 		instruction, ok := <-instructions
@@ -89,10 +82,20 @@ func main() {
 		if err != nil {
 			log.Printf("Failed parsing instruction %s%s%s due to %s%+v%s", SourceColor, instruction.String(), DefaultColor, ErrorColor, err, DefaultColor)
 		}
+		atomic.AddInt32(&instructionsDone, 1)
 		wg.Done()
 	}
 	wg.Wait()
 	log.Println("All done")
+	if instructionsDone == 0 {
+		log.Printf("No input provided")
+		log.Printf("Provide input as: ")
+		log.Printf("Arguments - %s <source>,<target>,<force?>", programName)
+		log.Printf("File - %s -f <file>", programName)
+		log.Printf("Folder (finding sync files in folder recursively) - %s -r <folder>", programName)
+		log.Printf("stdin - (cat <file> | %s)", programName)
+		os.Exit(1)
+	}
 }
 
 func ReadFromFilesRecursively(input string, output chan LinkInstruction, status chan error) {
@@ -102,35 +105,49 @@ func ReadFromFilesRecursively(input string, output chan LinkInstruction, status 
 	input = NormalizePath(input)
 	log.Printf("Reading input from files recursively starting in %s%s%s", PathColor, input, DefaultColor)
 
-	files, err := GetSyncFilesRecursively(input)
-	if err != nil {
-		log.Printf("Failed to get sync files recursively: %s%+v%s", ErrorColor, err, DefaultColor)
-		status <- err
-		return
-	}
+	files := make(chan string, 128)
+	recurseStatus := make(chan error)
+	go GetSyncFilesRecursively(input, files, recurseStatus)
+	go func() {
+		for {
+			err, ok := <-recurseStatus
+			if !ok {
+				break
+			}
+			if err != nil {
+				log.Printf("Failed to get sync files recursively: %s%+v%s", ErrorColor, err, DefaultColor)
+				status <- err
+			}
+		}
+	}()
 
 	var wg sync.WaitGroup
-	for _, file := range files {
-		fileCopy := file
+	for {
+		file, ok := <-files
+		if !ok {
+			log.Printf("No more files to process")
+			break
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			fileCopy = NormalizePath(fileCopy)
+			file = NormalizePath(file)
+			log.Printf("Processing file: %s%s%s", PathColor, file, DefaultColor)
 
 			// This "has" to be done because instructions are resolved in relation to cwd
-			fileDir := DirRegex.FindStringSubmatch(fileCopy)
+			fileDir := DirRegex.FindStringSubmatch(file)
 			if fileDir == nil {
-				log.Printf("Failed to extract directory from %s%s%s", SourceColor, fileCopy, DefaultColor)
+				log.Printf("Failed to extract directory from %s%s%s", SourceColor, file, DefaultColor)
 				return
 			}
-			log.Printf("Changing directory to %s%s%s (for %s%s%s)", PathColor, fileDir[1], DefaultColor, PathColor, fileCopy, DefaultColor)
+			log.Printf("Changing directory to %s%s%s (for %s%s%s)", PathColor, fileDir[1], DefaultColor, PathColor, file, DefaultColor)
 			err := os.Chdir(fileDir[1])
 			if err != nil {
 				log.Printf("Failed to change directory to %s%s%s: %s%+v%s", SourceColor, fileDir[1], DefaultColor, ErrorColor, err, DefaultColor)
 				return
 			}
 
-			ReadFromFile(fileCopy, output, status, false)
+			ReadFromFile(file, output, status, false)
 		}()
 	}
 	wg.Wait()
@@ -158,6 +175,7 @@ func ReadFromFile(input string, output chan LinkInstruction, status chan error, 
 			log.Printf("Error parsing line: %s'%s'%s, error: %s%+v%s", SourceColor, line, DefaultColor, ErrorColor, err, DefaultColor)
 			continue
 		}
+		log.Printf("Read instruction: %s", instruction.String())
 		output <- instruction
 	}
 }
@@ -178,7 +196,7 @@ func ReadFromArgs(output chan LinkInstruction, status chan error) {
 func ReadFromStdin(output chan LinkInstruction, status chan error) {
 	defer close(output)
 	defer close(status)
-	
+
 	log.Printf("Reading input from stdin")
 
 	info, err := os.Stdin.Stat()
