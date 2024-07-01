@@ -28,6 +28,7 @@ const DefaultColor = White
 const PathColor = Green
 
 var DirRegex, _ = regexp.Compile(`^(.+?)[/\\]sync$`)
+var FileRegex, _ = regexp.Compile(`^sync$`)
 var programName = os.Args[0]
 
 func main() {
@@ -131,6 +132,7 @@ func ReadFromFilesRecursively(input string, output chan LinkInstruction, status 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			log.Println(file)
 			file = NormalizePath(file)
 			log.Printf("Processing file: %s%s%s", PathColor, file, DefaultColor)
 
