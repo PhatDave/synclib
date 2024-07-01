@@ -35,18 +35,18 @@ func main() {
 	// source,target,force?
 	log.SetFlags(log.Lmicroseconds)
 
-	recurse := *flag.String("r", "", "recurse into directories")
-	file := *flag.String("f", "", "file to read instructions from")
+	recurse := flag.String("r", "", "recurse into directories")
+	file := flag.String("f", "", "file to read instructions from")
 	flag.Parse()
 
-	log.Printf("Recurse: %s", recurse)
-	log.Printf("File: %s", file)
+	log.Printf("Recurse: %s", *recurse)
+	log.Printf("File: %s", *file)
 
 	var instructions []LinkInstruction
-	if recurse != "" {
-		instructions, _ = ReadFromFilesRecursively(recurse)
-	} else if file != "" {
-		instructions, _ = ReadFromFile(file)
+	if *recurse != "" {
+		instructions, _ = ReadFromFilesRecursively(*recurse)
+	} else if *file != "" {
+		instructions, _ = ReadFromFile(*file)
 	} else if len(os.Args) > 1 {
 		instructions, _ = ReadFromArgs()
 	} else {
