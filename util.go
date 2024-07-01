@@ -82,12 +82,12 @@ func GetSyncFilesRecursively(input string, output chan string, status chan error
 
 	go func() {
 		for {
-			fmt.Printf("\rFiles processed: %d; Folders processed: %d; Workers: %d; Directory Stack Size: %d;", filesProcessed, foldersProcessed, len(workerPool), len(directories))
+			fmt.Printf("\rFiles processed: %d; Folders processed: %d; Workers: %d; Directory Stack Size: %d;", atomic.LoadInt32((&filesProcessed)), atomic.LoadInt32(&foldersProcessed), len(workerPool), len(directories))
 			<-progressTicker.C
 		}
 	}()
 
-	log.Printf("%+v", len(workerPool))
+	// log.Printf("%+v", len(workerPool))
 	go func() {
 		for directory := range directories {
 			workerPool <- struct{}{}
@@ -127,6 +127,16 @@ func GetSyncFilesRecursively(input string, output chan string, status chan error
 		}
 	}()
 
+	// This actually does not go through ALL files sadly...
+	// It so happens (very often) that we manage to quit between one iteration ending
+	// And another beginning
+	// In such a state workgroup is decreased and, before it has a chance to increase, we are done
+	// What I should do here is only terminate if directories is empty
+	// ...but how do I do that?
+	// I might be wrong... Fuck knows...
+	// It also sometimes happens that wg.Wait triggers after wg.Done on line 97 but before the next (what would be!) wg.Add on line 94
+	// This happens much more often with a small number of workers
+	// Such is the nature of race conditions...
 	wg.Wait()
 	log.Printf("Files processed: %d; Folders processed: %d", filesProcessed, foldersProcessed)
 }
