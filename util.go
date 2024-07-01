@@ -110,7 +110,7 @@ func GetSyncFilesRecursively(input string, output chan string, status chan error
 					} else {
 						// log.Println(file.Name(), DirRegex.MatchString(file.Name()))
 						if FileRegex.MatchString(file.Name()) {
-							log.Printf("Writing")
+							// log.Printf("Writing")
 							output <- filepath.Join(directory, file.Name())
 						}
 						atomic.AddInt32(&filesProcessed, 1)
@@ -128,5 +128,5 @@ func GetSyncFilesRecursively(input string, output chan string, status chan error
 	}()
 
 	wg.Wait()
-	log.Printf("Done")
+	log.Printf("Files processed: %d; Folders processed: %d", filesProcessed, foldersProcessed)
 }
