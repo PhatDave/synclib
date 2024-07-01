@@ -77,7 +77,7 @@ func GetSyncFilesRecursively(input string, output chan string, status chan error
 	var initial sync.Once
 	wg.Add(1)
 	directories := make(chan string, 100000)
-	workerPool := make(chan struct{}, 10000)
+	workerPool := make(chan struct{}, 4000)
 	directories <- input
 
 	go func() {
