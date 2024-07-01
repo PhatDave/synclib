@@ -72,19 +72,20 @@ func GetSyncFilesRecursively(input string, output chan string, status chan error
 	var foldersProcessed int32
 	progressTicker := time.NewTicker(200 * time.Millisecond)
 	defer progressTicker.Stop()
+
+	var wg sync.WaitGroup
+	var initial sync.Once
+	wg.Add(1)
+	directories := make(chan string, 100000)
+	workerPool := make(chan struct{}, 10000)
+	directories <- input
+
 	go func() {
 		for {
-			fmt.Printf("\rFiles processed: %d; Folders processed: %d;", filesProcessed, foldersProcessed)
+			fmt.Printf("\rFiles processed: %d; Folders processed: %d; Workers: %d; Directory Stack Size: %d;", filesProcessed, foldersProcessed, len(workerPool), len(directories))
 			<-progressTicker.C
 		}
 	}()
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	var initial sync.Once
-	directories := make(chan string, 10000)
-	workerPool := make(chan struct{}, 10000)
-	directories <- input
 
 	log.Printf("%+v", len(workerPool))
 	go func() {
@@ -96,7 +97,6 @@ func GetSyncFilesRecursively(input string, output chan string, status chan error
 				defer wg.Done()
 				defer func() { <-workerPool }()
 
-				// log.Printf("Reading directory %s", directory)
 				files, err := os.ReadDir(directory)
 				if err != nil {
 					log.Printf("Error reading directory %s: %+v", directory, err)
@@ -117,8 +117,10 @@ func GetSyncFilesRecursively(input string, output chan string, status chan error
 					}
 				}
 				// log.Printf("Done reading directory %s", directory)
-			
+
 				initial.Do(func() {
+					// Parallelism is very difficult...
+					time.Sleep(250 * time.Millisecond)
 					wg.Done()
 				})
 			}(directory)

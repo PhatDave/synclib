@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"flag"
+	"io"
 	"log"
 	"os"
 	"regexp"
@@ -32,13 +33,23 @@ var FileRegex, _ = regexp.Compile(`^sync$`)
 var programName = os.Args[0]
 
 func main() {
-	// Format:
-	// source,target,force?
-	log.SetFlags(log.Lmicroseconds)
-
 	recurse := flag.String("r", "", "recurse into directories")
 	file := flag.String("f", "", "file to read instructions from")
+	debug := flag.Bool("d", false, "debug")
 	flag.Parse()
+
+	if *debug {
+		log.SetFlags(log.Lmicroseconds | log.Lshortfile)
+		logFile, err := os.Create("main.log")
+		if err != nil {
+			log.Printf("Error creating log file: %v", err)
+			os.Exit(1)
+		}
+		logger := io.MultiWriter(os.Stdout, logFile)
+		log.SetOutput(logger)
+	} else {
+		log.SetFlags(log.Lmicroseconds)
+	}
 
 	log.Printf("Recurse: %s", *recurse)
 	log.Printf("File: %s", *file)
