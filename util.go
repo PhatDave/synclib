@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -60,10 +59,6 @@ func ConvertHome(input string) (string, error) {
 		return strings.Replace(input, "~", homedir, 1), nil
 	}
 	return input, nil
-}
-
-func InstructionToString(instruction LinkInstruction) string {
-	return fmt.Sprintf("%s%s%s%s%s%s%s%s%s", SourceColor, instruction.Source, DefaultColor, deliminer, TargetColor, instruction.Target, DefaultColor, deliminer, strconv.FormatBool(instruction.Force))
 }
 
 func GetSyncFilesRecursively(input string) ([]string, error) {
