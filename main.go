@@ -3,11 +3,10 @@ package main
 import (
 	"bufio"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"regexp"
-	"strings"
+	"sync"
 )
 
 const deliminer = ","
@@ -62,14 +61,19 @@ func main() {
 		log.Printf("stdin - (cat <file> | %s)", programName)
 		os.Exit(1)
 	}
+	var wg sync.WaitGroup
 	for _, instruction := range instructions {
 		log.Printf("Processing: %s", instruction.String())
-		err := instruction.RunSync()
+		status := make(chan error)
+		go instruction.RunAsync(status)
+		wg.Add(1)
+		err := <-status
 		if err != nil {
 			log.Printf("Failed parsing instruction %s%s%s due to %s%+v%s", SourceColor, instruction.String(), DefaultColor, ErrorColor, err, DefaultColor)
-			continue
 		}
+		wg.Done()
 	}
+	wg.Wait()
 }
 
 func ReadFromFilesRecursively(input string) ([]LinkInstruction, error) {

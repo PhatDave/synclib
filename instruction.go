@@ -85,12 +85,15 @@ func (instruction *LinkInstruction) RunSync() error {
 }
 
 func (instruction *LinkInstruction) RunAsync(status chan (error)) {
+	defer close(status)
 	if !FileExists(instruction.Source) {
 		status <- fmt.Errorf("instruction source %s%s%s does not exist", SourceColor, instruction.Source, DefaultColor)
+		return
 	}
 
 	if AreSame(instruction.Source, instruction.Target) {
 		status <- fmt.Errorf("source %s%s%s and target %s%s%s are the same, %snothing to do...%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor, PathColor, DefaultColor)
+		return
 	}
 
 	if FileExists(instruction.Target) {
@@ -98,6 +101,7 @@ func (instruction *LinkInstruction) RunAsync(status chan (error)) {
 			isSymlink, err := IsSymlink(instruction.Target)
 			if err != nil {
 				status <- fmt.Errorf("could not determine whether %s%s%s is a sym link or not, stopping; err: %s%+v%s", TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
+				return
 			}
 
 			if isSymlink {
@@ -105,20 +109,25 @@ func (instruction *LinkInstruction) RunAsync(status chan (error)) {
 				err = os.Remove(instruction.Target)
 				if err != nil {
 					status <- fmt.Errorf("failed deleting %s%s%s due to %s%+v%s", TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
+					return
 				}
 			} else {
 				status <- fmt.Errorf("refusing to delte actual (non symlink) file %s%s%s", TargetColor, instruction.Target, DefaultColor)
+				return
 			}
 		} else {
 			status <- fmt.Errorf("target %s%s%s exists - handle manually or set the 'forced' flag (3rd field)", TargetColor, instruction.Target, DefaultColor)
+			return
 		}
 	}
 
 	err := os.Symlink(instruction.Source, instruction.Target)
 	if err != nil {
 		status <- fmt.Errorf("failed creating symlink between %s%s%s and %s%s%s with error %s%+v%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor, ErrorColor, err, DefaultColor)
+		return
 	}
 	log.Printf("Created symlink between %s%s%s and %s%s%s", SourceColor, instruction.Source, DefaultColor, TargetColor, instruction.Target, DefaultColor)
 
 	status <- nil
+	return
 }
