@@ -75,6 +75,7 @@ func GetSyncFilesRecursively(input string, output chan string, status chan error
 
 	var wg sync.WaitGroup
 	var initial sync.Once
+	var done bool
 	wg.Add(1)
 	directories := make(chan string, 100000)
 	workerPool := make(chan struct{}, 4000)
@@ -117,12 +118,12 @@ func GetSyncFilesRecursively(input string, output chan string, status chan error
 					}
 				}
 				// log.Printf("Done reading directory %s", directory)
-
-				initial.Do(func() {
-					// Parallelism is very difficult...
-					time.Sleep(250 * time.Millisecond)
-					wg.Done()
-				})
+				done = len(directories) == 0
+				if done {
+					initial.Do(func() {
+						wg.Done()
+					})
+				}
 			}(directory)
 		}
 	}()
