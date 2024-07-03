@@ -197,7 +197,7 @@ func ReadFromArgs(output chan LinkInstruction, status chan error) {
 	defer close(status)
 
 	log.Printf("Reading input from args")
-	for _, arg := range os.Args[1:] {
+	for _, arg := range flag.Args() {
 		instruction, err := ParseInstruction(arg)
 		if err != nil {
 			log.Printf("Error parsing arg: %s'%s'%s, error: %s%+v%s", SourceColor, arg, DefaultColor, ErrorColor, err, DefaultColor)
